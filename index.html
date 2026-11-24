@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Skill Graph</title>
+  <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body, html {
+      width: 100%;
+      height: 100%;
+      background-color: #1e1e1e;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      overflow: hidden;
+    }
+    #graph {
+      width: 100vw;
+      height: 100vh;
+    }
+    .hint {
+      position: fixed;
+      bottom: 16px;
+      left: 16px;
+      color: #6e6e6e;
+      font-size: 12px;
+      pointer-events: none;
+      user-select: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="graph"></div>
+  <div class="hint">Drag nodes • Scroll to zoom • Hover to highlight connections</div>
+
+  <script>
+    // 1. Define your skills (3 levels max: Core Skill -> Sub-tool -> Key Concepts)
+    const rawNodes = [
+      // Core Hubs (Larger dots)
+      { id: "pbi", label: "Power BI", group: "core", size: 14 },
+      { id: "py", label: "Python", group: "core", size: 14 },
+      { id: "sql", label: "SQL", group: "core", size: 14 },
+      { id: "excel", label: "Excel", group: "core", size: 12 },
+
+      // Power BI Branch
+      { id: "dax", label: "DAX", group: "mid", size: 10 },
+      { id: "pq", label: "Power Query (M)", group: "mid", size: 9 },
+      { id: "rls", label: "Row-Level Security", group: "leaf", size: 7 },
+      { id: "papps", label: "Power Apps", group: "leaf", size: 7 },
+
+      // DAX Important Concepts (Depth limit reached)
+      { id: "calc", label: "CALCULATE & Filter Context", group: "leaf", size: 6 },
+      { id: "time", label: "Time Intelligence", group: "leaf", size: 6 },
+      { id: "iter", label: "Iterators (SUMX / AVERAGEX)", group: "leaf", size: 6 },
+      { id: "vars", label: "Variables (VAR / RETURN)", group: "leaf", size: 6 },
+
+      // Python Branch
+      { id: "pandas", label: "Pandas", group: "mid", size: 9 },
+      { id: "eda", label: "Data Cleaning & EDA", group: "leaf", size: 6 },
+      { id: "matplotlib", label: "Matplotlib", group: "leaf", size: 6 },
+      { id: "streamlit", label: "Streamlit", group: "leaf", size: 7 },
+
+      // SQL Branch
+      { id: "postgres", label: "PostgreSQL / MySQL", group: "mid", size: 8 },
+      { id: "sqlite", label: "SQLite", group: "mid", size: 8 },
+      { id: "opt", label: "Query Optimization", group: "leaf", size: 6 },
+      { id: "schema", label: "Schema Design", group: "leaf", size: 6 },
+
+      // Excel Branch
+      { id: "xform", label: "XLOOKUP & Pivot Tables", group: "leaf", size: 6 },
+      { id: "macro", label: "Power Pivot", group: "leaf", size: 6 }
+    ];
+
+    // 2. Define edges (connections)
+    const rawEdges = [
+      // Power BI connections
+      { from: "pbi", to: "dax" },
+      { from: "pbi", to: "pq" },
+      { from: "pbi", to: "rls" },
+      { from: "pbi", to: "papps" },
+      { from: "pbi", to: "sql" },    // Cross-link like Obsidian
+      { from: "pbi", to: "excel" },  // Cross-link
+
+      // DAX connections
+      { from: "dax", to: "calc" },
+      { from: "dax", to: "time" },
+      { from: "dax", to: "iter" },
+      { from: "dax", to: "vars" },
+
+      // Python connections
+      { from: "py", to: "pandas" },
+      { from: "py", to: "matplotlib" },
+      { from: "py", to: "streamlit" },
+      { from: "pandas", to: "eda" },
+      { from: "py", to: "sqlite" },  // Cross-link
+
+      // SQL connections
+      { from: "sql", to: "postgres" },
+      { from: "sql", to: "sqlite" },
+      { from: "sql", to: "opt" },
+      { from: "sql", to: "schema" },
+
+      // Excel connections
+      { from: "excel", to: "xform" },
+      { from: "excel", to: "macro" },
+      { from: "macro", to: "dax" }   // Shared DAX link
+    ];
+
+    const nodes = new vis.DataSet(
+      rawNodes.map(n => ({
+        ...n,
+        shape: "dot",
+        color: {
+          background: "#b8bcc2",
+          border: "#b8bcc2",
+          highlight: { background: "#a78bfa", border: "#c4b5fd" },
+          hover: { background: "#a78bfa", border: "#c4b5fd" }
+        },
+        font: {
+          color: "#9ca3af",
+          size: n.group === "core" ? 14 : 11,
+          face: "sans-serif",
+          vadjust: 4
+        }
+      }))
+    );
+
+    const edges = new vis.DataSet(
+      rawEdges.map((e, idx) => ({
+        id: idx,
+        ...e,
+        color: { color: "rgba(255, 255, 255, 0.14)", highlight: "#a78bfa", hover: "#a78bfa" },
+        width: 1,
+        smooth: false // Straight lines just like Obsidian
+      }))
+    );
+
+    const container = document.getElementById("graph");
+    const network = new vis.Network(
+      container,
+      { nodes, edges },
+      {
+        interaction: {
+          hover: true,
+          dragNodes: true,
+          dragView: true,
+          zoomView: true
+        },
+        physics: {
+          solver: "forceAtlas2Based",
+          forceAtlas2Based: {
+            gravitationalConstant: -45,
+            centralGravity: 0.008,
+            springLength: 95,
+            springConstant: 0.06,
+            damping: 0.4
+          },
+          stabilization: { iterations: 150 }
+        }
+      }
+    );
+
+    // Obsidian-style hover highlight: dim unrelated nodes & light up neighbors
+    network.on("hoverNode", function (params) {
+      const hoveredId = params.node;
+      const connectedNodes = new Set(network.getConnectedNodes(hoveredId));
+      connectedNodes.add(hoveredId);
+      const connectedEdges = new Set(network.getConnectedEdges(hoveredId));
+
+      nodes.update(
+        rawNodes.map(n => {
+          const isActive = connectedNodes.has(n.id);
+          return {
+            id: n.id,
+            color: {
+              background: n.id === hoveredId ? "#a78bfa" : isActive ? "#e5e7eb" : "rgba(184,188,194,0.18)",
+              border: n.id === hoveredId ? "#c4b5fd" : isActive ? "#e5e7eb" : "rgba(184,188,194,0.18)"
+            },
+            font: {
+              color: isActive ? "#f3f4f6" : "rgba(156,163,175,0.2)"
+            }
+          };
+        })
+      );
+
+      edges.update(
+        rawEdges.map((e, idx) => ({
+          id: idx,
+          color: {
+            color: connectedEdges.has(idx) ? "rgba(167, 139, 250, 0.75)" : "rgba(255, 255, 255, 0.04)"
+          },
+          width: connectedEdges.has(idx) ? 1.5 : 1
+        }))
+      );
+    });
+
+    // Reset colors when mouse leaves node
+    network.on("blurNode", function () {
+      nodes.update(
+        rawNodes.map(n => ({
+          id: n.id,
+          color: { background: "#b8bcc2", border: "#b8bcc2" },
+          font: { color: "#9ca3af" }
+        }))
+      );
+      edges.update(
+        rawEdges.map((e, idx) => ({
+          id: idx,
+          color: { color: "rgba(255, 255, 255, 0.14)" },
+          width: 1
+        }))
+      );
+    });
+  </script>
+</body>
+</html>
